@@ -1,0 +1,17 @@
+version: 1
+project:
+  name: coke-claw-test-v3
+runtime:
+  frontend:
+    path: frontend
+    port: 80
+  backend:
+    path: backend
+    port: 8080
+deploy:
+  target: k8s
+  environment: local-k8s
+  namespace: claw-shangguan
+  hostname: coke-claw-test-v3.claw.coke-twitter.com
+  registry: ghcr.io/cokepoppy
+
