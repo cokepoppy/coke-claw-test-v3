@@ -1,0 +1,121 @@
+name: Deploy Kubernetes
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  K8S_NAMESPACE: claw-shangguan
+  APP_HOSTNAME: coke-claw-test-v3.claw.coke-twitter.com
+  PROJECT_SLUG: coke-claw-test-v3
+  FRONTEND_IMAGE: ghcr.io/cokepoppy/coke-claw-test-v3-frontend
+  BACKEND_IMAGE: ghcr.io/cokepoppy/coke-claw-test-v3-backend
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate deploy prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${{ secrets.REGISTRY_USERNAME }}" || (echo "Missing REGISTRY_USERNAME secret" >&2; exit 1)
+          test -n "${{ secrets.REGISTRY_PASSWORD }}" || (echo "Missing REGISTRY_PASSWORD secret" >&2; exit 1)
+          test -n "${{ secrets.KUBE_CONFIG_B64 }}" || (echo "Missing KUBE_CONFIG_B64 secret" >&2; exit 1)
+          test -f deploy/app.yaml || (echo "Missing deploy/app.yaml" >&2; exit 1)
+          test -f deploy/frontend.Dockerfile || (echo "Missing deploy/frontend.Dockerfile" >&2; exit 1)
+          test -f deploy/k8s/frontend.yaml || (echo "Missing deploy/k8s/frontend.yaml" >&2; exit 1)
+          test -f deploy/k8s/ingress.yaml || (echo "Missing deploy/k8s/ingress.yaml" >&2; exit 1)
+          test -f deploy/backend.Dockerfile || (echo "Missing deploy/backend.Dockerfile" >&2; exit 1)
+          test -f deploy/k8s/backend.yaml || (echo "Missing deploy/k8s/backend.yaml" >&2; exit 1)
+          echo "Deploy prerequisites look good."
+
+      - name: Log in to registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.REGISTRY_SERVER || 'ghcr.io' }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/frontend.Dockerfile
+          push: true
+          tags: ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/backend.Dockerfile
+          push: true
+          tags: ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+
+      - name: Configure kubeconfig
+        shell: bash
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBE_CONFIG_B64 }}" | base64 --decode > ~/.kube/config
+
+      - name: Install envsubst
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext-base
+
+      - name: Apply manifests
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl create namespace "$K8S_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+          export FRONTEND_IMAGE_REF="$FRONTEND_IMAGE:${GITHUB_SHA}"
+          export BACKEND_IMAGE_REF="${BACKEND_IMAGE}:${GITHUB_SHA}"
+          envsubst < deploy/k8s/frontend.yaml | kubectl apply -n "$K8S_NAMESPACE" -f -
+          envsubst < deploy/k8s/backend.yaml | kubectl apply -n "$K8S_NAMESPACE" -f -
+          envsubst < deploy/k8s/ingress.yaml | kubectl apply -n "$K8S_NAMESPACE" -f -
+
+      - name: Wait for rollout
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubectl rollout status deployment/"$PROJECT_SLUG-frontend" -n "$K8S_NAMESPACE" --timeout=180s
+          kubectl rollout status deployment/"$PROJECT_SLUG-backend" -n "$K8S_NAMESPACE" --timeout=180s
+          kubectl get ingress "$PROJECT_SLUG-ingress" -n "$K8S_NAMESPACE"
+
+      - name: Capture deployment snapshot
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Kubernetes snapshot"
+            echo
+            echo '```text'
+            kubectl get deploy,svc,ingress -n "$K8S_NAMESPACE" -o wide || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deployment summary
+        shell: bash
+        run: |
+          echo "## Deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Namespace: $K8S_NAMESPACE" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Hostname: $APP_HOSTNAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Frontend image: $FRONTEND_IMAGE:${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Backend image: $BACKEND_IMAGE:${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Frontend URL: https://$APP_HOSTNAME" >> "$GITHUB_STEP_SUMMARY"
+

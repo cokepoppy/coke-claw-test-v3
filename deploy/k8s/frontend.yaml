@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coke-claw-test-v3-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coke-claw-test-v3-frontend
+  template:
+    metadata:
+      labels:
+        app: coke-claw-test-v3-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ${FRONTEND_IMAGE_REF}
+          ports:
+            - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coke-claw-test-v3-frontend
+spec:
+  selector:
+    app: coke-claw-test-v3-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+
