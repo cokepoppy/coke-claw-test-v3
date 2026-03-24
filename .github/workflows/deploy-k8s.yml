@@ -3,7 +3,7 @@ name: Deploy Kubernetes
 on:
   push:
     branches:
-      - main
+      - fullstack-e2e-20260324
   workflow_dispatch:
 
 permissions:
