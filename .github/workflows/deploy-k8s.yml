@@ -3,7 +3,7 @@ name: Deploy Kubernetes
 on:
   push:
     branches:
-      - main
+      - remote-k8s-e2e-mn8cl7lr-i1417o
   workflow_dispatch:
 
 permissions:
@@ -14,8 +14,8 @@ env:
   K8S_NAMESPACE: claw-shangguan
   APP_HOSTNAME: coke-claw-test-v3.claw.coke-twitter.com
   PROJECT_SLUG: coke-claw-test-v3
-  FRONTEND_IMAGE: ghcr.io/cokepoppy/coke-claw-test-v3-frontend
-  BACKEND_IMAGE: ghcr.io/cokepoppy/coke-claw-test-v3-backend
+  FRONTEND_IMAGE: ghcr.io/coke-claw-test-v3-frontend
+  BACKEND_IMAGE: ghcr.io/coke-claw-test-v3-backend
 
 jobs:
   build-and-deploy:
