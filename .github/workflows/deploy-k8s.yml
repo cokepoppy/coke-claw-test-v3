@@ -3,7 +3,7 @@ name: Deploy Kubernetes
 on:
   push:
     branches:
-      - remote-k8s-e2e-mn8k0lp5-q7ugoc
+      - remote-k8s-e2e-mn8k3hpv-bs2ky7
   workflow_dispatch:
 
 permissions:
