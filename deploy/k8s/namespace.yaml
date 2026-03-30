@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: claw-shangguan
+  labels:
+    name: claw-shangguan
+    project: coke-claw-test-v3
